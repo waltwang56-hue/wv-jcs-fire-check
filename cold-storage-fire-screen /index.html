@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>冷库设计阶段｜消防设计到位性快速筛查（5分钟）</title>
+  <style>
+    body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif; margin: 0; background: #f6f7fb; color: #111; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
+    .card { background: #fff; border-radius: 14px; padding: 18px 18px; box-shadow: 0 6px 20px rgba(0,0,0,.06); margin-bottom: 14px; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    .sub { color:#555; line-height:1.5; }
+    .q { margin-top: 14px; padding-top: 14px; border-top: 1px solid #eee; }
+    .q:first-of-type { border-top: none; padding-top: 0; }
+    .qtitle { font-weight: 700; margin: 0 0 10px; }
+    .opts label { display: block; padding: 8px 10px; border: 1px solid #e6e6e6; border-radius: 10px; margin: 8px 0; cursor: pointer; }
+    .opts input { margin-right: 8px; }
+    .btn { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; font-size: 16px; cursor: pointer; }
+    .btn.primary { background: #111; color: #fff; }
+    .btn.secondary { background: #eee; color: #111; margin-top: 10px; }
+    .result { padding: 14px; border-radius: 12px; }
+    .r-green { background:#e9f7ef; border:1px solid #cdebd9; }
+    .r-yellow{ background:#fff7e6; border:1px solid #ffe1a6; }
+    .r-red   { background:#fdeaea; border:1px solid #f6b9b9; }
+    .mono { font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace; font-size: 12px; background:#0b1020; color:#e8ecff; padding: 12px; border-radius: 10px; overflow:auto; }
+    .small { color:#666; font-size: 13px; line-height:1.5; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>冷库消防设计是否到位？</h1>
+      <div class="sub">
+        5 分钟快速筛查（设计阶段失火高风险识别）。<br/>
+        不涉及条文背诵；只判断是否已触发高风险设计决策。
+      </div>
+    </div>
+
+    <form id="form" class="card">
+      <div id="questions"></div>
+
+      <button type="submit" class="btn primary">提交并查看结果</button>
+      <button type="button" class="btn secondary" id="btnReset">清空重填</button>
+    </form>
+
+    <div id="output" class="card" style="display:none;"></div>
+
+    <div class="card">
+      <div class="small">
+        提示：这 10 题用于“第一步筛查”。若结果为 🟡/🔴，建议进入“全量评估（55 因子）”以形成可交付的尽调结论与整改清单。
+      </div>
+    </div>
+  </div>
+
+<script>
+/** 10题配置（可直接给codex扩展为多语言/接CRM） */
+const QUESTIONS = [
+  { id:"Q1", text:"Q1：是否已按功能和火灾危险性正确划分防火分区？", type:"single", options:["是","否","不确定"] },
+  { id:"Q2", text:"Q2：是否存在“实际贯通，但图纸仍按分区处理”的情况？（孔洞/通道/穿越未有效封堵等）", type:"single", options:["是","否","不确定"] },
+  { id:"Q3", text:"Q3：保温材料燃烧性能等级是否明确并满足消防设计目标？", type:"single", options:["是","否","不确定"] },
+  { id:"Q4", text:"Q4：是否评估过保温材料在火灾中的参与燃烧风险（不止等级合规）？", type:"single", options:["是","否","不确定"] },
+  { id:"Q5", text:"Q5：制冷机房、叉车/电池充电间等是否被明确识别为重点风险房间？", type:"single", options:["是","否","不确定"] },
+  { id:"Q6", text:"Q6：上述房间是否设置气体泄漏/可燃气体/漏电等报警装置？", type:"single", options:["是","否","不确定"] },
+  { id:"Q7", text:"Q7：报警后是否具备联动控制（联动排风/切电/停机等）？", type:"single", options:["是","否","不确定"] },
+  { id:"Q8", text:"Q8：是否校核过开关（断路器/熔断器）容量与电缆/导线截面匹配？", type:"single", options:["是","否","不确定"] },
+  { id:"Q9", text:"Q9：是否存在“开关选大、电缆偏小”的情况？", type:"single", options:["是","否","不确定"] },
+  { id:"Q10", text:"Q10：施工前是否进行过独立第三方消防/失火风险审查？", type:"single", options:["是","否","不确定"] },
+];
+
+/** 每题到 CASEF-D v2.6 因子映射（用于导流全量评估/报告解释） */
+const FACTOR_MAP = {
+  Q1: { primary:["F1.10"], related:["F1.9","F5.2"] },
+  Q2: { primary:["F5.1","F5.2"], related:["F1.9","F4.4","F0.1.2"] },
+  Q3: { primary:["F2.1"], related:["F2.9"] },
+  Q4: { primary:["F2.2"], related:["F2.1","F0.1.3"] },
+  Q5: { primary:["F3.5","F1.12"], related:["F3.2"] },
+  Q6: { primary:["F3.6","F1.13","F4.6"], related:["F1.14"] },
+  Q7: { primary:["F5.4"], related:["F1.13","F3.6","F4.6"] },
+  Q8: { primary:["F4.5"], related:[] },
+  Q9: { primary:["F4.5"], related:["F1.14"] },
+  Q10:{ primary:["F5.4"], related:[] },
+};
+
+/** 关键触发规则（IHS风格：不算分，只分层） */
+function evaluate(answers){
+  const keyHits = [];
+  if (answers.Q2 === "是") keyHits.push("Q2");
+  if (answers.Q4 === "否") keyHits.push("Q4");
+  if (answers.Q7 === "否") keyHits.push("Q7");
+  if (answers.Q9 === "是") keyHits.push("Q9");
+
+  const noCount = Object.values(answers).filter(v => v === "否").length;
+  const unkCount = Object.values(answers).filter(v => v === "不确定").length;
+
+  let level = "GREEN";
+  if (keyHits.length >= 2) level = "RED";
+  else if (keyHits.length === 1) level = "YELLOW";
+  else if (unkCount >= 3 || noCount >= 4) level = "YELLOW"; // 信息缺失或否项偏多：建议进入全量评估
+
+  const triggeredFactors = new Set();
+  const relatedFactors = new Set();
+  for (const [qid, val] of Object.entries(answers)){
+    // 只要不是“是”，就认为该题存在风险信号，需要进入后续因子深挖（更利于导流）
+    if (val !== "是"){
+      (FACTOR_MAP[qid]?.primary || []).forEach(x => triggeredFactors.add(x));
+      (FACTOR_MAP[qid]?.related || []).forEach(x => relatedFactors.add(x));
+    }
+  }
+
+  const result = {
+    level,
+    keyHits,
+    answers,
+    triggered_factors: Array.from(triggeredFactors),
+    related_factors: Array.from(relatedFactors),
+    suggestion:
+      level === "RED"
+        ? "🔴 当前设计已触发系统性失火高风险决策：建议在施工前立即进行“全量评估（55因子）”并形成整改闭环。"
+        : level === "YELLOW"
+          ? "🟡 当前设计存在需关注的风险信号或信息不充分：建议进入“全量评估（55因子）”定位Top风险点。"
+          : "🟢 暂未发现明显系统性失火风险：建议保留证据链，并在关键节点做第三方复核。"
+  };
+  return result;
+}
+
+function renderQuestions(){
+  const container = document.getElementById("questions");
+  container.innerHTML = "";
+  QUESTIONS.forEach((q, idx) => {
+    const div = document.createElement("div");
+    div.className = "q";
+    div.innerHTML = `
+      <div class="qtitle">${q.text}（单选题）</div>
+      <div class="opts">
+        ${q.options.map((opt, i) => `
+          <label>
+            <input type="radio" name="${q.id}" value="${opt}" required />
+            ${opt}
+          </label>
+        `).join("")}
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function collectAnswers(formEl){
+  const answers = {};
+  QUESTIONS.forEach(q => {
+    const v = formEl.querySelector(`input[name="${q.id}"]:checked`)?.value;
+    answers[q.id] = v || "";
+  });
+  return answers;
+}
+
+function showResult(res){
+  const out = document.getElementById("output");
+  out.style.display = "block";
+
+  let cls = "r-green", title="🟢 暂未发现明显系统性失火风险";
+  if (res.level === "YELLOW"){ cls="r-yellow"; title="🟡 需关注：建议进入全量评估"; }
+  if (res.level === "RED"){ cls="r-red"; title="🔴 高风险：建议立即进入全量评估"; }
+
+  out.innerHTML = `
+    <div class="result ${cls}">
+      <div style="font-weight:800; font-size:18px; margin-bottom:8px;">${title}</div>
+      <div class="small">${res.suggestion}</div>
+      <div class="small" style="margin-top:10px;">
+        关键触发题：${res.keyHits.length ? res.keyHits.join(", ") : "无"}
+      </div>
+      <div class="small" style="margin-top:8px;">
+        建议进入全量评估优先关注因子（Primary）：<b>${res.triggered_factors.join(", ") || "无"}</b><br/>
+        关联因子（Related）：${res.related_factors.join(", ") || "无"}
+      </div>
+    </div>
+
+    <div style="margin-top:12px; font-weight:700;">JSON（可直接给后端/CRM/全量评估跳转用）</div>
+    <div class="mono" id="jsonBox"></div>
+  `;
+
+  document.getElementById("jsonBox").textContent = JSON.stringify(res, null, 2);
+  window.scrollTo({ top: out.offsetTop - 10, behavior: "smooth" });
+}
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  document.getElementById("form").reset();
+  document.getElementById("output").style.display = "none";
+});
+
+document.getElementById("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const answers = collectAnswers(e.target);
+  const result = evaluate(answers);
+
+  // 可选：提交到你们后端（留给codex接CRM）
+  // fetch("/api/submit", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(result) })
+
+  showResult(result);
+});
+
+renderQuestions();
+</script>
+</body>
+</html>
